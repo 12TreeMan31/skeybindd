@@ -5,40 +5,30 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
-// #include <getopt.h> // Command line args
 #include <unistd.h>
-// #include <syslog.h> // Logging
 #include <poll.h>
-
 #include <sys/stat.h>
-
+#include <sys/wait.h>
+// #include <getopt.h> // Command line args
+// #include <syslog.h> // Logging
 #include <libevdev/libevdev.h>
+// #include <libevdev/libevdev-uinput.h>
 #include <libseat.h>
+
+#include "config.h"
+
+#define STR_LENGTH(x) sizeof(x) / sizeof(x[0])
 
 int daemonize()
 {
-	switch (fork())
-	{
-	case -1:
-		return -1;
-	case 0:
-		break;
-	default:
+	if (fork() != 0)
 		exit(EXIT_SUCCESS);
-	}
 
 	if (setsid() == -1)
-		return -1;
+		exit(EXIT_FAILURE);
 
-	switch (fork())
-	{
-	case -1:
-		return -1;
-	case 0:
-		break;
-	default:
+	if (fork() != 0)
 		exit(EXIT_SUCCESS);
-	}
 
 	umask(0);
 	chdir("/");
@@ -59,6 +49,21 @@ int daemonize()
 	return 0;
 }
 
+int program_spawn(char *command[])
+{
+	if (fork() == 0)
+	{
+		if (fork() == 0)
+		{
+			setsid();
+			execvp(command[0], command);
+		}
+		exit(EXIT_SUCCESS);
+	}
+	wait(NULL);
+	return 0;
+}
+
 static void handle_enable(struct libseat *backend, void *data)
 {
 	(void)backend;
@@ -75,7 +80,7 @@ static void handle_disable(struct libseat *backend, void *data)
 	libseat_disable_seat(backend);
 }
 
-/*void sort(int **arr, int n)
+void sort(int *arr, int n)
 {
 	int key, j;
 	for (int i = 1; i < n - 1; i++)
@@ -83,14 +88,14 @@ static void handle_disable(struct libseat *backend, void *data)
 		key = arr[i];
 		j = i - 1;
 
-		while (j >= 0 && key < arr[j])
+		while (j >= 0 && key > arr[j])
 		{
 			arr[j + 1] = arr[j];
 			j--;
 		}
 		arr[j + 1] = key;
 	}
-}*/
+}
 
 // Just in case
 /* static const struct option long_options[] = {
@@ -100,7 +105,8 @@ static void handle_disable(struct libseat *backend, void *data)
 
 int main(int argc, char *argv[])
 {
-	/* Args */
+	int rc;
+	// Args
 	if (argc < 2)
 	{
 		printf("Did not specify device\n");
@@ -112,6 +118,19 @@ int main(int argc, char *argv[])
 	{
 		exit(EXIT_FAILURE);
 	}
+
+	/*int fd;
+	struct libevdev *dev = NULL;
+	struct libevdev_uinput *uidev = NULL;
+
+	fd = open(file, O_RDONLY);
+
+	rc = libevdev_new_from_fd(fd, &dev);
+	if (rc == -1)
+		exit(EXIT_FAILURE);
+
+	fd = open("/dev/uinput", O_RDWR);
+	libevdev_uinput_create_from_device(dev, fd, &uidev);*/
 
 	/* Creates the seat */
 	libseat_set_log_level(LIBSEAT_LOG_LEVEL_DEBUG);
@@ -146,10 +165,6 @@ int main(int argc, char *argv[])
 
 	/* Starts getting events with evdev */
 	struct libevdev *dev = NULL;
-	int rc;
-	/*fd = open(argv[1], O_RDONLY);
-	if (fd == -1)
-		exit(EXIT_FAILURE);*/
 	rc = libevdev_new_from_fd(fd, &dev);
 	if (rc == -1)
 		exit(EXIT_FAILURE);
@@ -161,27 +176,15 @@ int main(int argc, char *argv[])
 		},
 	};
 
-	// Have this be determaned when reading the config file
+	for (int i = 0; i < STR_LENGTH(keybindings); i++)
+	{
+		sort(keybindings[i].keycodes, KEY_BUFFER);
+	}
 
-	// unsigned short pressedKeys[8];
-	// memset(pressedKeys, -1, 8);
+	int pressedKeys[KEY_BUFFER] = {0};
 
-	/* TODO: Make this set through the config file */
-	int pressedKeys[8] = {0};
-
-	int volumeUp[8] =
-		{
-			0,
-			0,
-			0,
-			0,
-			0,
-			0,
-			KEY_U,
-			KEY_LEFTALT,
-		};
-
-	do
+	rc = 1;
+	while (rc == 1 || rc == 0 || rc == -EAGAIN)
 	{
 		// Used by libevdev to store the event info
 		struct input_event ev;
@@ -190,102 +193,69 @@ int main(int argc, char *argv[])
 		rc = poll(fds, 1, -1);
 		rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
 
-		// Handles events (Ignores all EV_SYN events but we might want to check for SYN_DROPPED)
-		if (rc == 0 && ev.code != EV_SYN && ev.code != EV_MSC)
+		// Filters out unused events
+		if (rc != 0 || (ev.code == EV_SYN && ev.type == SYN_DROPPED) || ev.code == EV_MSC)
+			continue;
+
+		/* Handles the events */
+
+		// Key pressed
+		if (ev.value == 0)
 		{
-			/*printf("Event: %s %s %d\n",
-				   libevdev_event_type_get_name(ev.type),
-				   libevdev_event_code_get_name(ev.type, ev.code),
-				   ev.value);*/
-
-			// Key pressed
-			if (ev.value == 0)
+			// Remove key from
+			for (int i = 0; i < KEY_BUFFER; i++)
 			{
-				// Remove key from
-				for (int i = 0; i < 8; i++)
+				if (pressedKeys[i] == ev.code)
 				{
-					if (pressedKeys[i] == ev.code)
-					{
-						pressedKeys[i] = 0;
-					}
-				}
-			}
-			// Key released
-			else if (ev.value == 1 || ev.value == 2)
-			{
-				if (ev.value == 1)
-				{
-					// Add key to the queue
-					for (int i = 0; i < 8; i++)
-					{
-						if (pressedKeys[i] == 0)
-						{
-							pressedKeys[i] = ev.code;
-							break;
-						}
-					}
-				}
-
-				// Sort
-				int key, j;
-				for (int i = 1; i < 8; i++)
-				{
-					key = pressedKeys[i];
-					j = i - 1;
-
-					while (j >= 0 && key < pressedKeys[j])
-					{
-						pressedKeys[j + 1] = pressedKeys[j];
-						j--;
-					}
-					pressedKeys[j + 1] = key;
-				}
-
-				if (pressedKeys[7] == volumeUp[7] &&
-					pressedKeys[6] == volumeUp[6])
-				{
-					system("pactl set-sink-volume @DEFAULT_SINK@ +10%");
+					pressedKeys[i] = 0;
 				}
 			}
 		}
-	} while (rc == 1 || rc == 0 || rc == -EAGAIN);
+		// Key released
+		else if (ev.value == 1 || ev.value == 2)
+		{
+			if (ev.value == 1)
+			{
+				// Add key to the queue
+				for (int i = 0; i < KEY_BUFFER; i++)
+				{
+					if (pressedKeys[i] == 0)
+					{
+						pressedKeys[i] = ev.code;
+						break;
+					}
+				}
+			}
 
-	/*
-	//Might not even use and just have user point to the device they want
-	int fd;
-	char buffer[200000], bufferT[100000];
+			sort(pressedKeys, KEY_BUFFER);
 
-	fd = open("/proc/bus/input/devices", O_RDONLY, O_NONBLOCK);
-	if (read(fd, buffer, 100000) == -1)
-	{
-		perror("read");
+			// Compairs to two arrays
+			bool isMatch;
+			for (int i = 0; i < STR_LENGTH(keybindings); i++)
+			{
+				int *tempArr = keybindings[i].keycodes;
+
+				isMatch = false;
+				for (int j = 0; j < KEY_BUFFER - 1; j++)
+				{
+					if (pressedKeys[j] == tempArr[j])
+					{
+						isMatch = true;
+					}
+					else
+					{
+						isMatch = false;
+						break;
+					}
+				}
+				if (isMatch)
+				{
+					program_spawn((char **)keybindings[i].command);
+					break;
+				}
+			}
+		}
 	}
-	read(fd, bufferT, 100000);
-	strcat(buffer, bufferT);
 
-	puts(buffer);
-
-	char *pEvent, *pHandlers, *pEV = buffer;
-	// Reads /proc/
-	do
-	{
-		pHandlers = strstr(pEV, "Handlers=");
-		if (pHandlers == NULL)
-		{
-			break;
-		}
-		pEV = strstr(pHandlers, "EV=");
-		// Fix this because keyboard can be higher than 120013 (https://unix.stackexchange.com/questions/74903/explain-ev-in-proc-bus-input-devices-data)
-
-		if (strncmp(pEV + 3, "120013", 6) == 0)
-		{
-			pEvent = strstr(pHandlers, "event");
-			printf("Keyboard found! %.7s\n", pEvent);
-		}
-	} while (1);*/
-
-	// Start polling? for events on keyboards
-
-	// Prossess input -> Run some command specified by user
 	return 0;
 }

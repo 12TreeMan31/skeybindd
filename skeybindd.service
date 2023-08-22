@@ -1,0 +1,8 @@
+[Unit]
+Description=A TTY Keybind Daemon
+
+[Service]
+ExecStart=/usr/bin/skeybindd
+
+[Install]
+WantedBy=default.target
