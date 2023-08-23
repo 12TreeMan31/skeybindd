@@ -1,7 +1,9 @@
 [Unit]
-Description=A TTY Keybind Daemon
+Description=TTY Keybind Daemon
+After=multi-user.target
 
 [Service]
+Type=simple
 ExecStart=/usr/bin/skeybindd
 
 [Install]

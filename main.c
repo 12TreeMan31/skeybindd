@@ -9,29 +9,25 @@
 #include <poll.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-// #include <getopt.h> // Command line args
 // #include <syslog.h> // Logging
 #include <libevdev/libevdev.h>
 // #include <libevdev/libevdev-uinput.h>
-#include <libseat.h>
 
 #include "config.h"
 
 #define STR_LENGTH(x) sizeof(x) / sizeof(x[0])
 
+#ifndef SYSTEMD_DAEMON
 int daemonize()
 {
 	if (fork() != 0)
 		exit(EXIT_SUCCESS);
 
 	if (setsid() == -1)
-		exit(EXIT_FAILURE);
+		return -1;
 
 	if (fork() != 0)
 		exit(EXIT_SUCCESS);
-
-	umask(0);
-	chdir("/");
 
 	int maxfd, fd;
 	maxfd = sysconf(_SC_OPEN_MAX);
@@ -48,6 +44,7 @@ int daemonize()
 		return -1;
 	return 0;
 }
+#endif
 
 int program_spawn(char *command[])
 {
@@ -62,22 +59,6 @@ int program_spawn(char *command[])
 	}
 	wait(NULL);
 	return 0;
-}
-
-static void handle_enable(struct libseat *backend, void *data)
-{
-	(void)backend;
-	int *active = (int *)data;
-	(*active)++;
-}
-
-static void handle_disable(struct libseat *backend, void *data)
-{
-	(void)backend;
-	int *active = (int *)data;
-	(*active)--;
-
-	libseat_disable_seat(backend);
 }
 
 void sort(int *arr, int n)
@@ -97,15 +78,10 @@ void sort(int *arr, int n)
 	}
 }
 
-// Just in case
-/* static const struct option long_options[] = {
-	{"help", no_argument, NULL, 'h'},
-	{"device", required_argument, NULL, 'd'},
-	{0, 0, 0, 0}}; */
-
 int main(int argc, char *argv[])
 {
 	int rc;
+
 	// Args
 	if (argc < 2)
 	{
@@ -114,57 +90,17 @@ int main(int argc, char *argv[])
 	}
 	char *file = argv[1];
 
-	if (daemonize() == -1)
-	{
-		exit(EXIT_FAILURE);
-	}
-
-	/*int fd;
-	struct libevdev *dev = NULL;
-	struct libevdev_uinput *uidev = NULL;
-
-	fd = open(file, O_RDONLY);
-
-	rc = libevdev_new_from_fd(fd, &dev);
+#ifndef SYSTEMD_DAEMON
+	rc = daemonize();
 	if (rc == -1)
 		exit(EXIT_FAILURE);
-
-	fd = open("/dev/uinput", O_RDWR);
-	libevdev_uinput_create_from_device(dev, fd, &uidev);*/
-
-	/* Creates the seat */
-	libseat_set_log_level(LIBSEAT_LOG_LEVEL_DEBUG);
-
-	int active = 0;
-	struct libseat_seat_listener listener = {
-		.enable_seat = handle_enable,
-		.disable_seat = handle_disable,
-	};
-
-	struct libseat *backend = libseat_open_seat(&listener, &active);
-	if (backend == NULL)
-		exit(EXIT_FAILURE);
-
-	// Wait untill the seat has started
-	while (active == 0)
-	{
-		if (libseat_dispatch(backend, -1) == -1)
-		{
-			libseat_close_seat(backend);
-			exit(EXIT_FAILURE);
-		}
-	}
-
-	int fd, device;
-	device = libseat_open_device(backend, file, &fd);
-	if (device == -1)
-	{
-		libseat_close_seat(backend);
-		exit(EXIT_FAILURE);
-	}
+#endif
 
 	/* Starts getting events with evdev */
+
 	struct libevdev *dev = NULL;
+	int fd;
+	fd = open(file, O_RDWR, O_NOCTTY);
 	rc = libevdev_new_from_fd(fd, &dev);
 	if (rc == -1)
 		exit(EXIT_FAILURE);
@@ -176,11 +112,13 @@ int main(int argc, char *argv[])
 		},
 	};
 
+	// Sorts the keys in a way thats good for sorting
 	for (int i = 0; i < STR_LENGTH(keybindings); i++)
 	{
 		sort(keybindings[i].keycodes, KEY_BUFFER);
 	}
 
+	// Whats currently being pressed
 	int pressedKeys[KEY_BUFFER] = {0};
 
 	rc = 1;

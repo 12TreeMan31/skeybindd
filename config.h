@@ -1,7 +1,10 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define KEY_BUFFER 8
+/* Complie time options */
+#define KEY_BUFFER 3
+#define SYSTEMD_DAEMON
+
 #define MOD_KEY KEY_LEFTMETA
 
 /* See for more info on possible keys or use a program like evtest */
@@ -22,6 +25,7 @@ static const char *mic_mute[] = {"pactl", "set-source-mute", "@DEFAULT_SOURCE@",
 
 /* mpc */
 static const char *music_toggle[] = {"mpc", "toggle", NULL};
+static const char *music_stop[] = {"mpc", "stop", NULL};
 static const char *music_next[] = {"mpc", "next", NULL};
 static const char *music_previous[] = {"mpc", "prev", NULL};
 
@@ -36,6 +40,7 @@ static struct keybinding keybindings[] =
 		{{KEY_NEXTSONG}, music_next},
 		{{KEY_PREVIOUSSONG}, music_previous},
 		{{KEY_PLAYPAUSE}, music_toggle},
+		{{KEY_STOPCD}, music_stop},
 };
 
 #endif
