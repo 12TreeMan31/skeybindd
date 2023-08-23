@@ -15,10 +15,10 @@
 
 #include "config.h"
 
-#define STR_LENGTH(x) sizeof(x) / sizeof(x[0])
+#define STR_LENGTH(x) sizeof(x) / sizeof(*x)
 
 #ifndef SYSTEMD_DAEMON
-int daemonize()
+int daemonize(void)
 {
 	if (fork() != 0)
 		exit(EXIT_SUCCESS);
@@ -46,7 +46,7 @@ int daemonize()
 }
 #endif
 
-int program_spawn(char *command[])
+void program_spawn(char *command[])
 {
 	if (fork() == 0)
 	{
@@ -58,7 +58,6 @@ int program_spawn(char *command[])
 		exit(EXIT_SUCCESS);
 	}
 	wait(NULL);
-	return 0;
 }
 
 void sort(int *arr, int n)
@@ -82,7 +81,7 @@ int main(int argc, char *argv[])
 {
 	int rc;
 
-	// Args
+	/* Args */
 	if (argc < 2)
 	{
 		printf("Did not specify device\n");
@@ -96,8 +95,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 #endif
 
-	/* Starts getting events with evdev */
-
+	/* Sets up evdev */
 	struct libevdev *dev = NULL;
 	int fd;
 	fd = open(file, O_RDWR, O_NOCTTY);
@@ -112,22 +110,20 @@ int main(int argc, char *argv[])
 		},
 	};
 
-	// Sorts the keys in a way thats good for sorting
+	/* Sorts keybinds in an expected format */
 	for (int i = 0; i < STR_LENGTH(keybindings); i++)
 	{
 		sort(keybindings[i].keycodes, KEY_BUFFER);
 	}
 
-	// Whats currently being pressed
+	// Will contain all active key events
 	int pressedKeys[KEY_BUFFER] = {0};
 
 	rc = 1;
 	while (rc == 1 || rc == 0 || rc == -EAGAIN)
 	{
-		// Used by libevdev to store the event info
 		struct input_event ev;
 
-		// Poll for new events then get the event data
 		rc = poll(fds, 1, -1);
 		rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
 
@@ -167,7 +163,7 @@ int main(int argc, char *argv[])
 
 			sort(pressedKeys, KEY_BUFFER);
 
-			// Compairs to two arrays
+			// Compairs the two arrays
 			bool isMatch;
 			for (int i = 0; i < STR_LENGTH(keybindings); i++)
 			{
