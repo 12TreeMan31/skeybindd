@@ -6,18 +6,17 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <poll.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 // #include <syslog.h> // Logging
 #include <libevdev/libevdev.h>
-// #include <libevdev/libevdev-uinput.h>
+#include <libevdev/libevdev-uinput.h>
 
 #include "config.h"
 
 #define STR_LENGTH(x) sizeof(x) / sizeof(*x)
 
-#ifndef SYSTEMD_DAEMON
+#ifndef SYSTEMD
 int daemonize(void)
 {
 	if (fork() != 0)
@@ -89,26 +88,31 @@ int main(int argc, char *argv[])
 	}
 	char *file = argv[1];
 
-#ifndef SYSTEMD_DAEMON
+#ifndef SYSTEMD
 	rc = daemonize();
 	if (rc == -1)
 		exit(EXIT_FAILURE);
 #endif
 
+	int fd;
+
 	/* Sets up evdev */
 	struct libevdev *dev = NULL;
-	int fd;
 	fd = open(file, O_RDWR, O_NOCTTY);
 	rc = libevdev_new_from_fd(fd, &dev);
 	if (rc == -1)
 		exit(EXIT_FAILURE);
 
-	struct pollfd fds[1] = {
-		{
-			.events = POLLIN,
-			.fd = fd,
-		},
-	};
+	/* Grabs device so it cannot pass stray inputs */
+	rc = libevdev_grab(dev, LIBEVDEV_GRAB);
+	if (rc == -1)
+		exit(EXIT_FAILURE);
+
+	/* uinput */
+	struct libevdev_uinput *udev;
+	rc = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &udev);
+	if (rc == -1)
+		exit(EXIT_FAILURE);
 
 	/* Sorts keybinds in an expected format */
 	for (int i = 0; i < STR_LENGTH(keybindings); i++)
@@ -119,20 +123,17 @@ int main(int argc, char *argv[])
 	// Will contain all active key events
 	int pressedKeys[KEY_BUFFER] = {0};
 
-	rc = 1;
+	rc = 0;
 	while (rc == 1 || rc == 0 || rc == -EAGAIN)
 	{
 		struct input_event ev;
-
-		rc = poll(fds, 1, -1);
-		rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
+		rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL | LIBEVDEV_READ_FLAG_BLOCKING, &ev);
 
 		// Filters out unused events
 		if (rc != 0 || (ev.code == EV_SYN && ev.type == SYN_DROPPED) || ev.code == EV_MSC)
 			continue;
 
 		/* Handles the events */
-
 		// Key pressed
 		if (ev.value == 0)
 		{
@@ -144,6 +145,7 @@ int main(int argc, char *argv[])
 					pressedKeys[i] = 0;
 				}
 			}
+			libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
 		}
 		// Key released
 		else if (ev.value == 1 || ev.value == 2)
@@ -163,20 +165,16 @@ int main(int argc, char *argv[])
 
 			sort(pressedKeys, KEY_BUFFER);
 
-			// Compairs the two arrays
 			bool isMatch;
 			for (int i = 0; i < STR_LENGTH(keybindings); i++)
 			{
-				int *tempArr = keybindings[i].keycodes;
+				struct keybinding *curKeybind = &keybindings[i];
+				// int *curKeybind = keybindings[i].keycodes;
 
-				isMatch = false;
+				isMatch = true;
 				for (int j = 0; j < KEY_BUFFER - 1; j++)
 				{
-					if (pressedKeys[j] == tempArr[j])
-					{
-						isMatch = true;
-					}
-					else
+					if (pressedKeys[j] != curKeybind->keycodes[j])
 					{
 						isMatch = false;
 						break;
@@ -184,9 +182,14 @@ int main(int argc, char *argv[])
 				}
 				if (isMatch)
 				{
-					program_spawn((char **)keybindings[i].command);
+					program_spawn((char **)curKeybind->command);
 					break;
 				}
+			}
+			if (!isMatch)
+			{
+				libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
+				// libevdev_uinput_write_event(udev, EV_SYN, SYN_REPORT, 0);
 			}
 		}
 	}

@@ -1,5 +1,5 @@
 CC=clang
-CFLAGS= -Wall -Werror -O3
+CFLAGS= -Wall -Werror
 PREFIX = /usr
 
 build: main.c
@@ -12,6 +12,7 @@ install: build
 
 systemd:
 	cp skeybindd.service /etc/systemd/user/
+	systemctl daemon-reload
 
 clean:
 	rm skeybindd

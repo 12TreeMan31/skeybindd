@@ -3,12 +3,13 @@
 
 /* Complie time options */
 #define KEY_BUFFER 3
-#define SYSTEMD_DAEMON
+#define SYSTEMD
 
 #define MOD_KEY KEY_LEFTMETA
 
 /* See for more info on possible keys or use a program like evtest */
 #include <linux/input-event-codes.h>
+#include <stdio.h> // NULL
 
 struct keybinding
 {
@@ -35,12 +36,11 @@ static struct keybinding keybindings[] =
 		{{KEY_VOLUMEUP}, volume_up},
 		{{KEY_VOLUMEDOWN}, volume_down},
 		{{KEY_MUTE}, volume_mute},
-		{{KEY_LEFTSHIFT, MOD_KEY}, mic_mute},
+		{{KEY_LEFTSHIFT, MOD_KEY, KEY_F4}, mic_mute},
 
 		{{KEY_NEXTSONG}, music_next},
 		{{KEY_PREVIOUSSONG}, music_previous},
 		{{KEY_PLAYPAUSE}, music_toggle},
 		{{KEY_STOPCD}, music_stop},
 };
-
 #endif
