@@ -15,6 +15,7 @@
 #include "config.h"
 
 #define STR_LENGTH(x) sizeof(x) / sizeof(*x)
+#define LOG(str) fprintf(stdout, str)
 
 #ifndef SYSTEMD
 int daemonize(void)
@@ -63,11 +64,17 @@ int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, char *p
 {
 	int fd, rc;
 	fd = open(path, O_RDWR, O_NOCTTY);
+	if (fd < 0)
+	{
+		LOG(strerror(fd));
+		return fd;
+	}
 
 	/* Sets up evdev */
 	rc = libevdev_new_from_fd(fd, dev);
 	if (rc < 0)
 	{
+		LOG(strerror(rc));
 		close(fd);
 		return rc;
 	}
@@ -76,6 +83,7 @@ int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, char *p
 	rc = libevdev_grab(*dev, LIBEVDEV_GRAB);
 	if (rc < 0)
 	{
+		LOG(strerror(rc));
 		close(fd);
 		libevdev_free(*dev);
 		return rc;
@@ -85,6 +93,7 @@ int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, char *p
 	rc = libevdev_uinput_create_from_device(*dev, LIBEVDEV_UINPUT_OPEN_MANAGED, udev);
 	if (rc < 0)
 	{
+		LOG(strerror(rc));
 		close(fd);
 		libevdev_free(*dev);
 		libevdev_grab(*dev, LIBEVDEV_UNGRAB);
@@ -182,14 +191,14 @@ int main(int argc, char *argv[])
 #ifndef SYSTEMD
 	rc = daemonize();
 	if (rc == -1)
-		exit(EXIT_FAILURE);
+		exit(rc);
 #endif
 
 	struct libevdev *dev = NULL;
 	struct libevdev_uinput *udev = NULL;
 	rc = create_udevice(&dev, &udev, file);
 	if (rc < 0)
-		exit(EXIT_FAILURE);
+		exit(rc);
 
 	/* Sorts keybinds in an expected format */
 	for (int i = 0; i < STR_LENGTH(keybindings); i++)
