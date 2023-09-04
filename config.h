@@ -3,7 +3,7 @@
 
 /* Complie time options */
 #define KEY_BUFFER 3
-#define SYSTEMD
+// #define SYSTEMD
 
 #define MOD_KEY KEY_LEFTMETA
 

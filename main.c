@@ -59,6 +59,41 @@ void program_spawn(char *command[])
 	wait(NULL);
 }
 
+int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, char *path)
+{
+	int fd, rc;
+	fd = open(path, O_RDWR, O_NOCTTY);
+
+	/* Sets up evdev */
+	rc = libevdev_new_from_fd(fd, dev);
+	if (rc < 0)
+	{
+		close(fd);
+		return rc;
+	}
+
+	/* Grabs device so it cannot pass stray inputs */
+	rc = libevdev_grab(*dev, LIBEVDEV_GRAB);
+	if (rc < 0)
+	{
+		close(fd);
+		libevdev_free(*dev);
+		return rc;
+	}
+
+	/* uinput */
+	rc = libevdev_uinput_create_from_device(*dev, LIBEVDEV_UINPUT_OPEN_MANAGED, udev);
+	if (rc < 0)
+	{
+		close(fd);
+		libevdev_free(*dev);
+		libevdev_grab(*dev, LIBEVDEV_UNGRAB);
+		return rc;
+	}
+
+	return 0;
+}
+
 void sort(int *arr, int n)
 {
 	int key, j;
@@ -73,6 +108,62 @@ void sort(int *arr, int n)
 			j--;
 		}
 		arr[j + 1] = key;
+	}
+}
+
+/* Looks to see if anything interesting is happening
+   Returns -1 on error, 0 if no keybinding, 1 if keybinding*/
+int handle_event(struct input_event *ev, int *pressedKeys)
+{
+	switch (ev->value)
+	{
+	case 0: // Key released
+		for (int i = 0; i <= KEY_BUFFER - 1; i++)
+		{
+			if (ev->code == pressedKeys[i])
+			{
+				pressedKeys[i] = 0;
+			}
+		}
+		return 0;
+	case 1: // Key pressed
+		for (int i = 0; i <= KEY_BUFFER - 1; i++)
+		{
+			if (pressedKeys[i] == 0)
+			{
+				pressedKeys[i] = ev->code;
+				break;
+			}
+		}
+		// Formats pressedKeys so its easier to compare
+		sort(pressedKeys, KEY_BUFFER);
+
+		// Sees if the currently pressed keys match
+		for (int i = 0; i <= STR_LENGTH(keybindings); i++)
+		{
+			// Picks one keybind list from config.h
+			struct keybinding *curKeybind = &keybindings[i];
+			bool isMatch = true;
+
+			for (int j = 0; j <= KEY_BUFFER - 1; j++)
+			{
+				if (pressedKeys[j] != curKeybind->keycodes[j])
+				{
+					isMatch = false;
+					break;
+				}
+			}
+			if (isMatch)
+			{
+				program_spawn((char **)curKeybind->command);
+				return 1;
+			}
+		}
+		return 0;
+	case 2: // Key held
+		return 0;
+	default: // Not expected
+		return -1;
 	}
 }
 
@@ -94,24 +185,10 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 #endif
 
-	int fd;
-
-	/* Sets up evdev */
 	struct libevdev *dev = NULL;
-	fd = open(file, O_RDWR, O_NOCTTY);
-	rc = libevdev_new_from_fd(fd, &dev);
-	if (rc == -1)
-		exit(EXIT_FAILURE);
-
-	/* Grabs device so it cannot pass stray inputs */
-	rc = libevdev_grab(dev, LIBEVDEV_GRAB);
-	if (rc == -1)
-		exit(EXIT_FAILURE);
-
-	/* uinput */
-	struct libevdev_uinput *udev;
-	rc = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &udev);
-	if (rc == -1)
+	struct libevdev_uinput *udev = NULL;
+	rc = create_udevice(&dev, &udev, file);
+	if (rc < 0)
 		exit(EXIT_FAILURE);
 
 	/* Sorts keybinds in an expected format */
@@ -130,68 +207,16 @@ int main(int argc, char *argv[])
 		rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL | LIBEVDEV_READ_FLAG_BLOCKING, &ev);
 
 		// Filters out unused events
-		if (rc != 0 || (ev.code == EV_SYN && ev.type == SYN_DROPPED) || ev.code == EV_MSC)
+		if (rc != 0 || (ev.code == EV_SYN && ev.type == SYN_DROPPED))
 			continue;
 
-		/* Handles the events */
-		// Key pressed
-		if (ev.value == 0)
+		if (handle_event(&ev, pressedKeys) == 1)
 		{
-			// Remove key from
-			for (int i = 0; i < KEY_BUFFER; i++)
-			{
-				if (pressedKeys[i] == ev.code)
-				{
-					pressedKeys[i] = 0;
-				}
-			}
-			libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
+			continue;
 		}
-		// Key released
-		else if (ev.value == 1 || ev.value == 2)
-		{
-			if (ev.value == 1)
-			{
-				// Add key to the queue
-				for (int i = 0; i < KEY_BUFFER; i++)
-				{
-					if (pressedKeys[i] == 0)
-					{
-						pressedKeys[i] = ev.code;
-						break;
-					}
-				}
-			}
 
-			sort(pressedKeys, KEY_BUFFER);
-
-			bool isMatch;
-			for (int i = 0; i < STR_LENGTH(keybindings); i++)
-			{
-				struct keybinding *curKeybind = &keybindings[i];
-				// int *curKeybind = keybindings[i].keycodes;
-
-				isMatch = true;
-				for (int j = 0; j < KEY_BUFFER - 1; j++)
-				{
-					if (pressedKeys[j] != curKeybind->keycodes[j])
-					{
-						isMatch = false;
-						break;
-					}
-				}
-				if (isMatch)
-				{
-					program_spawn((char **)curKeybind->command);
-					break;
-				}
-			}
-			if (!isMatch)
-			{
-				libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
-				// libevdev_uinput_write_event(udev, EV_SYN, SYN_REPORT, 0);
-			}
-		}
+		/* MCS_SCAN is not dropped properly */
+		libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
 	}
 
 	return 0;
