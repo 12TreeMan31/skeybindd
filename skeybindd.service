@@ -4,7 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/skeybindd
+ExecStart=/usr/bin/skeybindd <YOUR KEYBOARD>
 
 [Install]
 WantedBy=default.target
