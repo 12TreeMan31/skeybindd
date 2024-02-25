@@ -133,7 +133,7 @@ int handle_event(struct input_event *ev, int *pressedKeys)
 	switch (ev->value)
 	{
 	case 0: // Key released
-		for (int i = 0; i <= KEY_BUFFER - 1; i++)
+		for (int i = 0; i < KEY_BUFFER; i++)
 		{
 			if (ev->code == pressedKeys[i])
 			{
@@ -160,7 +160,7 @@ int handle_event(struct input_event *ev, int *pressedKeys)
 			struct keybinding *curKeybind = &keybindings[i];
 			bool isMatch = true;
 
-			for (int j = 0; j <= KEY_BUFFER - 1; j++)
+			for (int j = 0; j < KEY_BUFFER; j++)
 			{
 				if (pressedKeys[j] != curKeybind->keycodes[j])
 				{
