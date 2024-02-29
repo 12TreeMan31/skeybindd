@@ -2,7 +2,10 @@ CC=clang
 CFLAGS= -Wall -Werror
 PREFIX = /usr
 
-build: main.c
+config.h:
+	cp config.def.h $@
+	
+build: main.c config.h
 	$(CC) $(CFLAGS) -o skeybindd main.c `pkg-config --cflags --libs libevdev`
 
 install: build

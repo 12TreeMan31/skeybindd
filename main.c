@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 // #include <syslog.h> // Logging
@@ -15,9 +16,7 @@
 #include "config.h"
 
 #define STR_LENGTH(x) sizeof(x) / sizeof(*x)
-#define LOG(str) fprintf(stdout, str)
 
-#ifndef SYSTEMD
 int daemonize(void)
 {
 	if (fork() != 0)
@@ -44,7 +43,6 @@ int daemonize(void)
 		return -1;
 	return 0;
 }
-#endif
 
 void program_spawn(char *command[])
 {
@@ -60,15 +58,9 @@ void program_spawn(char *command[])
 	wait(NULL);
 }
 
-int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, char *path)
+int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, int fd)
 {
-	int fd, rc;
-	fd = open(path, O_RDONLY | O_NOCTTY);
-	if (fd < 0)
-	{
-		perror("Could not open fd");
-		return fd;
-	}
+	int rc;
 
 	/* Sets up evdev */
 	rc = libevdev_new_from_fd(fd, dev);
@@ -147,9 +139,11 @@ int handle_event(struct input_event *ev, int *pressedKeys)
 				break;
 			}
 		}
+
 		// Formats pressedKeys so its easier to compare
 		sort(pressedKeys, KEY_BUFFER);
 
+	case 2: // Key held
 		// Sees if the currently pressed keys match
 		for (int i = 0; i <= STR_LENGTH(keybindings); i++)
 		{
@@ -172,34 +166,54 @@ int handle_event(struct input_event *ev, int *pressedKeys)
 			}
 		}
 		return 0;
-	case 2: // Key held
-		return 0;
 	default: // Not expected
 		return -1;
 	}
 }
 
+static const struct option long_options[] = {
+	{"daemon", no_argument, NULL, 'd'},
+	{"log", no_argument, NULL, 'l'},
+	{"file", required_argument, NULL, 'f'},
+	{0, 0, 0, 0}};
+
+// Should return the fd of the keyboard
+int handle_arguments(int argc, char *argv[])
+{
+	int fd;
+	int opt = 0, optIndex = 0;
+	while (opt != -1)
+	{
+		opt = getopt_long(argc, argv, "dlf:", long_options, &optIndex);
+		switch (opt)
+		{
+		case 'd':
+			if (daemonize() == -1)
+				exit(EXIT_FAILURE);
+			break;
+		case 'f':
+			fd = open(optarg, O_RDONLY | O_NOCTTY);
+			if (fd == -1)
+			{
+				perror("Could not open device");
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case 'l':
+			break;
+		}
+	}
+	return fd;
+}
+
 int main(int argc, char *argv[])
 {
-	int rc;
-
-	/* Args */
-	if (argc < 2)
-	{
-		printf("Did not specify device\n");
-		exit(EXIT_FAILURE);
-	}
-	char *file = argv[1];
-
-#ifndef SYSTEMD
-	rc = daemonize();
-	if (rc == -1)
-		exit(rc);
-#endif
-
+	int rc, fd;
 	struct libevdev *dev = NULL;
 	struct libevdev_uinput *udev = NULL;
-	rc = create_udevice(&dev, &udev, file);
+
+	fd = handle_arguments(argc, argv);
+	rc = create_udevice(&dev, &udev, fd);
 	if (rc < 0)
 		exit(rc);
 
