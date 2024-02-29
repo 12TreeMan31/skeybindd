@@ -63,11 +63,10 @@ void program_spawn(char *command[])
 int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, char *path)
 {
 	int fd, rc;
-	fd = open(path, O_RDWR, O_NOCTTY);
+	fd = open(path, O_RDONLY | O_NOCTTY);
 	if (fd < 0)
 	{
 		perror("Could not open fd");
-		// LOG(strerror(fd));
 		return fd;
 	}
 
@@ -75,38 +74,32 @@ int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, char *p
 	rc = libevdev_new_from_fd(fd, dev);
 	if (rc < 0)
 	{
-		perror("Could not create evdev device");
-
-		// LOG(strerror(rc));
-		close(fd);
-		return rc;
+		goto fail;
 	}
 
 	/* Grabs device so it cannot pass stray inputs */
 	rc = libevdev_grab(*dev, LIBEVDEV_GRAB);
 	if (rc < 0)
 	{
-		perror("Could not grab");
-
-		// LOG(strerror(rc));
-		close(fd);
-		libevdev_free(*dev);
-		return rc;
+		goto ufail;
 	}
 
 	/* uinput */
 	rc = libevdev_uinput_create_from_device(*dev, LIBEVDEV_UINPUT_OPEN_MANAGED, udev);
 	if (rc < 0)
 	{
-		// LOG(strerror(rc));
-		perror("Could not create uinput device");
-		close(fd);
-		libevdev_free(*dev);
 		libevdev_grab(*dev, LIBEVDEV_UNGRAB);
-		return rc;
+		goto ufail;
 	}
 
 	return 0;
+
+ufail:
+	libevdev_free(*dev);
+fail:
+	perror("Could not create uinput device");
+	close(fd);
+	return rc;
 }
 
 void sort(int *arr, int n)
@@ -144,6 +137,10 @@ int handle_event(struct input_event *ev, int *pressedKeys)
 	case 1: // Key pressed
 		for (int i = 0; i <= KEY_BUFFER - 1; i++)
 		{
+			if (pressedKeys[i] == ev->code)
+			{
+				return 1;
+			}
 			if (pressedKeys[i] == 0)
 			{
 				pressedKeys[i] = ev->code;
