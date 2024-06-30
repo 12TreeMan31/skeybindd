@@ -10,6 +10,8 @@
 #include <linux/input-event-codes.h>
 #include <stdio.h> // NULL
 
+// In the future I would like add support for function callbacks
+
 struct keybinding
 {
 	int keycodes[KEY_BUFFER];
@@ -42,4 +44,7 @@ static struct keybinding keybindings[] =
 		{{KEY_PLAYPAUSE}, music_toggle},
 		{{KEY_STOPCD}, music_stop},
 };
+
+#define KEYBINDING_LEN sizeof(keybindings) / sizeof(*keybindings)
+
 #endif

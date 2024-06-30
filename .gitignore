@@ -1,4 +1,5 @@
 temp/
 .vscode/
 config.h
+skeybindd.service
 skeybindd

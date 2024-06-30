@@ -9,13 +9,19 @@
 #include <getopt.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-// #include <syslog.h> // Logging
 #include <libevdev/libevdev.h>
 #include <libevdev/libevdev-uinput.h>
 
 #include "config.h"
 
-#define STR_LENGTH(x) sizeof(x) / sizeof(*x)
+#define VERSION "1.0"
+
+/*
+	TODO
+	- Properly handle dropping key events
+	- Starting up without keeping the last regestered event
+	- Stop program from crashing when device is unplugged
+*/
 
 int daemonize(void)
 {
@@ -62,42 +68,35 @@ int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, int fd)
 {
 	int rc;
 
-	/* Sets up evdev */
 	rc = libevdev_new_from_fd(fd, dev);
 	if (rc < 0)
 	{
-		goto fail;
+		return rc;
 	}
 
-	/* Grabs device so it cannot pass stray inputs */
+	// The reason why we grab the device is so that another application doesn't also try and regester key events
 	rc = libevdev_grab(*dev, LIBEVDEV_GRAB);
 	if (rc < 0)
 	{
-		goto ufail;
+		libevdev_free(*dev);
+		return rc;
 	}
 
-	/* uinput */
 	rc = libevdev_uinput_create_from_device(*dev, LIBEVDEV_UINPUT_OPEN_MANAGED, udev);
 	if (rc < 0)
 	{
 		libevdev_grab(*dev, LIBEVDEV_UNGRAB);
-		goto ufail;
+		libevdev_free(*dev);
+		return rc;
 	}
 
 	return 0;
-
-ufail:
-	libevdev_free(*dev);
-fail:
-	perror("Could not create uinput device");
-	close(fd);
-	return rc;
 }
 
 void sort(int *arr, int n)
 {
 	int key, j;
-	for (int i = 1; i < n - 1; i++)
+	for (int i = 1; i < n; i++)
 	{
 		key = arr[i];
 		j = i - 1;
@@ -145,7 +144,7 @@ int handle_event(struct input_event *ev, int *pressedKeys)
 
 	case 2: // Key held
 		// Sees if the currently pressed keys match
-		for (int i = 0; i <= STR_LENGTH(keybindings); i++)
+		for (int i = 0; i <= KEYBINDING_LEN; i++)
 		{
 			// Picks one keybind list from config.h
 			struct keybinding *curKeybind = &keybindings[i];
@@ -172,6 +171,7 @@ int handle_event(struct input_event *ev, int *pressedKeys)
 }
 
 static const struct option long_options[] = {
+	{"version", no_argument, NULL, 'v'},
 	{"daemon", no_argument, NULL, 'd'},
 	{"log", no_argument, NULL, 'l'},
 	{"file", required_argument, NULL, 'f'},
@@ -184,7 +184,7 @@ int handle_arguments(int argc, char *argv[])
 	int opt = 0, optIndex = 0;
 	while (opt != -1)
 	{
-		opt = getopt_long(argc, argv, "dlf:", long_options, &optIndex);
+		opt = getopt_long(argc, argv, "vdlf:", long_options, &optIndex);
 		switch (opt)
 		{
 		case 'd':
@@ -201,6 +201,10 @@ int handle_arguments(int argc, char *argv[])
 			break;
 		case 'l':
 			break;
+		case 'v':
+			printf("skeybindd " VERSION " 2024-06-29\n");
+			exit(EXIT_SUCCESS);
+			break;
 		}
 	}
 	return fd;
@@ -208,17 +212,19 @@ int handle_arguments(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-	int rc, fd;
+	int fd = handle_arguments(argc, argv);
 	struct libevdev *dev = NULL;
 	struct libevdev_uinput *udev = NULL;
 
-	fd = handle_arguments(argc, argv);
-	rc = create_udevice(&dev, &udev, fd);
-	if (rc < 0)
-		exit(rc);
+	if (create_udevice(&dev, &udev, fd) < 0)
+	{
+		perror("Could not create device");
+		close(fd);
+		return -1;
+	}
 
 	/* Sorts keybinds in an expected format */
-	for (int i = 0; i < STR_LENGTH(keybindings); i++)
+	for (int i = 0; i < KEYBINDING_LEN; i++)
 	{
 		sort(keybindings[i].keycodes, KEY_BUFFER);
 	}
@@ -226,20 +232,22 @@ int main(int argc, char *argv[])
 	// Will contain all active key events
 	int pressedKeys[KEY_BUFFER] = {0};
 
-	rc = 0;
-	while (rc == 1 || rc == 0 || rc == -EAGAIN)
-	{
-		struct input_event ev;
-		rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL | LIBEVDEV_READ_FLAG_BLOCKING, &ev);
+	struct input_event ev;
 
-		// Filters out unused events
-		if (rc != 0 || (ev.code == EV_SYN && ev.type == SYN_DROPPED))
-			continue;
+	// For now when grabbing device it might hold first key pressed
+	libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
+
+	while (libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0)
+	{
+		// Event dropped
+		if (ev.code == EV_SYN && ev.type == SYN_DROPPED)
+		{
+			libevdev_next_event(dev, LIBEVDEV_READ_FLAG_SYNC, &ev);
+			fprintf(stderr, "SYN_DROPPED\n");
+		}
 
 		if (handle_event(&ev, pressedKeys) == 1)
-		{
 			continue;
-		}
 
 		/* MCS_SCAN is not dropped properly */
 		libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
