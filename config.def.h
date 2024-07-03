@@ -9,12 +9,14 @@
 /* See for more info on possible keys or use a program like evtest */
 #include <linux/input-event-codes.h>
 #include <stdio.h> // NULL
+#include <stdint.h>
 
 // In the future I would like add support for function callbacks
 
 struct keybinding
 {
-	int keycodes[KEY_BUFFER];
+	uint16_t keycodes[KEY_BUFFER];
+	uint64_t binding;
 	const char **command;
 };
 
@@ -32,17 +34,16 @@ static const char *music_next[] = {"mpc", "next", NULL};
 static const char *music_previous[] = {"mpc", "prev", NULL};
 
 /* put keybindings here */
-static struct keybinding keybindings[] =
-	{
-		{{KEY_VOLUMEUP}, volume_up},
-		{{KEY_VOLUMEDOWN}, volume_down},
-		{{KEY_MUTE}, volume_mute},
-		{{KEY_LEFTSHIFT, MOD_KEY, KEY_F4}, mic_mute},
+static struct keybinding keybindings[] = {
+	{{KEY_VOLUMEUP}, 0, volume_up},
+	{{KEY_VOLUMEDOWN}, 0, volume_down},
+	{{KEY_MUTE}, 0, volume_mute},
+	{{KEY_LEFTSHIFT, MOD_KEY, KEY_F4}, 0, mic_mute},
 
-		{{KEY_NEXTSONG}, music_next},
-		{{KEY_PREVIOUSSONG}, music_previous},
-		{{KEY_PLAYPAUSE}, music_toggle},
-		{{KEY_STOPCD}, music_stop},
+	{{KEY_NEXTSONG}, 0, music_next},
+	{{KEY_PREVIOUSSONG}, 0, music_previous},
+	{{KEY_PLAYPAUSE}, 0, music_toggle},
+	{{KEY_STOPCD}, 0, music_stop},
 };
 
 #define KEYBINDING_LEN sizeof(keybindings) / sizeof(*keybindings)

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #include <string.h>
 #include <errno.h>
@@ -93,9 +94,10 @@ int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, int fd)
 	return 0;
 }
 
-void sort(int *arr, int n)
+void sort(uint16_t *arr, int n)
 {
-	int key, j;
+	uint16_t key;
+	int j;
 	for (int i = 1; i < n; i++)
 	{
 		key = arr[i];
@@ -112,58 +114,54 @@ void sort(int *arr, int n)
 
 /* Looks to see if anything interesting is happening
    Returns -1 on error, 0 if no keybinding, 1 if keybinding*/
-int handle_event(struct input_event *ev, int *pressedKeys)
+int handle_event(struct input_event *ev, uint16_t *keyState)
 {
+	uint64_t keylist = 0;
+
 	switch (ev->value)
 	{
 	case 0: // Key released
 		for (int i = 0; i < KEY_BUFFER; i++)
 		{
-			if (ev->code == pressedKeys[i])
+			if (ev->code == keyState[i])
 			{
-				pressedKeys[i] = 0;
+				keyState[i] = 0;
 			}
 		}
 		return 0;
 	case 1: // Key pressed
 		for (int i = 0; i <= KEY_BUFFER - 1; i++)
 		{
-			if (pressedKeys[i] == ev->code)
+			if (keyState[i] == ev->code)
 			{
 				return 1;
 			}
-			if (pressedKeys[i] == 0)
+			if (keyState[i] == 0)
 			{
-				pressedKeys[i] = ev->code;
+				keyState[i] = ev->code;
 				break;
 			}
 		}
 
 		// Formats pressedKeys so its easier to compare
-		sort(pressedKeys, KEY_BUFFER);
+		sort(keyState, KEY_BUFFER);
 
 	case 2: // Key held
 		// Sees if the currently pressed keys match
+		for (int i = 0; i < KEY_BUFFER; i++)
+		{
+			keylist = keylist << 16 | keyState[i];
+		}
+
 		for (int i = 0; i <= KEYBINDING_LEN; i++)
 		{
-			// Picks one keybind list from config.h
-			struct keybinding *curKeybind = &keybindings[i];
-			bool isMatch = true;
-
-			for (int j = 0; j < KEY_BUFFER; j++)
+			if (keylist == keybindings[i].binding)
 			{
-				if (pressedKeys[j] != curKeybind->keycodes[j])
-				{
-					isMatch = false;
-					break;
-				}
-			}
-			if (isMatch)
-			{
-				program_spawn((char **)curKeybind->command);
+				program_spawn((char **)keybindings[i].command);
 				return 1;
 			}
 		}
+
 		return 0;
 	default: // Not expected
 		return -1;
@@ -173,7 +171,6 @@ int handle_event(struct input_event *ev, int *pressedKeys)
 static const struct option long_options[] = {
 	{"version", no_argument, NULL, 'v'},
 	{"daemon", no_argument, NULL, 'd'},
-	{"log", no_argument, NULL, 'l'},
 	{"file", required_argument, NULL, 'f'},
 	{0, 0, 0, 0}};
 
@@ -184,7 +181,7 @@ int handle_arguments(int argc, char *argv[])
 	int opt = 0, optIndex = 0;
 	while (opt != -1)
 	{
-		opt = getopt_long(argc, argv, "vdlf:", long_options, &optIndex);
+		opt = getopt_long(argc, argv, "vdf:", long_options, &optIndex);
 		switch (opt)
 		{
 		case 'd':
@@ -198,8 +195,6 @@ int handle_arguments(int argc, char *argv[])
 				perror("Could not open device");
 				exit(EXIT_FAILURE);
 			}
-			break;
-		case 'l':
 			break;
 		case 'v':
 			printf("skeybindd " VERSION " 2024-06-29\n");
@@ -227,17 +222,39 @@ int main(int argc, char *argv[])
 	for (int i = 0; i < KEYBINDING_LEN; i++)
 	{
 		sort(keybindings[i].keycodes, KEY_BUFFER);
+		for (int j = 0; j < KEY_BUFFER; j++)
+		{
+			keybindings[i].binding = keybindings[i].binding << 16 | keybindings[i].keycodes[j];
+		}
 	}
 
 	// Will contain all active key events
-	int pressedKeys[KEY_BUFFER] = {0};
+	uint16_t keyState[KEY_BUFFER] = {0};
 
 	struct input_event ev;
 
 	// For now when grabbing device it might hold first key pressed
 	libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
+	libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
 
-	while (libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0)
+	for (int i = 0; i < 1000; i++)
+	{
+		libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
+		// Event dropped
+		if (ev.code == EV_SYN && ev.type == SYN_DROPPED)
+		{
+			libevdev_next_event(dev, LIBEVDEV_READ_FLAG_SYNC, &ev);
+			fprintf(stderr, "SYN_DROPPED\n");
+		}
+
+		if (handle_event(&ev, keyState) == 1)
+			continue;
+
+		/* MCS_SCAN is not dropped properly */
+		libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
+	}
+
+	/*while (libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0)
 	{
 		// Event dropped
 		if (ev.code == EV_SYN && ev.type == SYN_DROPPED)
@@ -246,12 +263,12 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "SYN_DROPPED\n");
 		}
 
-		if (handle_event(&ev, pressedKeys) == 1)
+		if (handle_event(&ev, keyState) == 1)
 			continue;
 
-		/* MCS_SCAN is not dropped properly */
+		//MCS_SCAN is not dropped properly
 		libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
-	}
+	}*/
 
 	return 0;
 }

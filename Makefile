@@ -9,7 +9,7 @@ build: main.c config.h
 	$(CC) -O3 $(CFLAGS) -o skeybindd main.c `pkg-config --cflags --libs libevdev`
 
 debug: main.c config.h
-	$(CC) -O0 $(CFLAGS) -o skeybindd main.c `pkg-config --cflags --libs libevdev`
+	gcc $(CFLAGS) -o skeybindd main.c `pkg-config --cflags --libs libevdev` -g -pg -fprofile-arcs -ftest-coverage
 
 install: build
 	mkdir -p ${DESTDIR}${PREFIX}/bin
