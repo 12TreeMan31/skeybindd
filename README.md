@@ -22,7 +22,7 @@ When starting the program you must specify what device to read inputs from. Thes
 
 You can then start skeybindd like so:
 ``````
-skeybindd -f /dev/input/<YOUR_DEVICE>
+skeybindd -f /dev/input/eventX
 ``````
 
 ## Configuration

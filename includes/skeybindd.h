@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 #define KEY_BUFFER 4
 
 union bindingPair

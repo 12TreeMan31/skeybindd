@@ -192,7 +192,7 @@ int handle_arguments(int argc, char *argv[])
 			}
 			break;
 		case 'v':
-			printf("skeybindd " VERSION " 2024-06-29\n");
+			printf("skeybindd " VERSION " 2024-07-08\n");
 			exit(EXIT_SUCCESS);
 			break;
 		}
@@ -235,9 +235,8 @@ int main(int argc, char *argv[])
 	//  libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
 	//  libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
 
-	for (int i = 0; i < 1000; i++)
+	while (libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0)
 	{
-		libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
 		// Event dropped
 		if (ev.code == EV_SYN && ev.type == SYN_DROPPED)
 		{
@@ -248,25 +247,9 @@ int main(int argc, char *argv[])
 		if (handle_event(&ev, keyState) == 1)
 			continue;
 
-		/* MCS_SCAN is not dropped properly */
+		// MCS_SCAN is not dropped properly
 		libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
 	}
-
-	/*while (libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0)
-	{
-		// Event dropped
-		if (ev.code == EV_SYN && ev.type == SYN_DROPPED)
-		{
-			libevdev_next_event(dev, LIBEVDEV_READ_FLAG_SYNC, &ev);
-			fprintf(stderr, "SYN_DROPPED\n");
-		}
-
-		if (handle_event(&ev, keyState) == 1)
-			continue;
-
-		//MCS_SCAN is not dropped properly
-		libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
-	}*/
 
 	return 0;
 }
