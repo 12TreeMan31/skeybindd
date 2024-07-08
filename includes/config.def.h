@@ -1,24 +1,11 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-/* Complie time options */
-#define KEY_BUFFER 3
-
-#define MOD_KEY KEY_LEFTMETA
-
 /* See for more info on possible keys or use a program like evtest */
 #include <linux/input-event-codes.h>
-#include <stdio.h> // NULL
-#include <stdint.h>
+#include "includes/skeybindd.h"
 
-// In the future I would like add support for function callbacks
-
-struct keybinding
-{
-	uint16_t keycodes[KEY_BUFFER];
-	uint64_t binding;
-	const char **command;
-};
+#define MOD_KEY KEY_LEFTMETA
 
 /* put commands here */
 /* pulseaudio */
@@ -35,15 +22,16 @@ static const char *music_previous[] = {"mpc", "prev", NULL};
 
 /* put keybindings here */
 static struct keybinding keybindings[] = {
-	{{KEY_VOLUMEUP}, 0, volume_up},
-	{{KEY_VOLUMEDOWN}, 0, volume_down},
-	{{KEY_MUTE}, 0, volume_mute},
-	{{KEY_LEFTSHIFT, MOD_KEY, KEY_F4}, 0, mic_mute},
+	{.binding.keycodes = {KEY_VOLUMEUP}, volume_up},
+	{.binding.keycodes = {KEY_VOLUMEDOWN}, volume_down},
+	{.binding.keycodes = {KEY_MUTE}, volume_mute},
+	{.binding.keycodes = {KEY_LEFTSHIFT, MOD_KEY, KEY_F4}, mic_mute},
 
-	{{KEY_NEXTSONG}, 0, music_next},
-	{{KEY_PREVIOUSSONG}, 0, music_previous},
-	{{KEY_PLAYPAUSE}, 0, music_toggle},
-	{{KEY_STOPCD}, 0, music_stop},
+	{.binding.keycodes = {KEY_NEXTSONG}, music_next},
+	{.binding.keycodes = {KEY_PREVIOUSSONG}, music_previous},
+	{.binding.keycodes = {KEY_PLAYPAUSE}, music_toggle},
+	{.binding.keycodes = {KEY_STOPCD}, music_stop},
+
 };
 
 #define KEYBINDING_LEN sizeof(keybindings) / sizeof(*keybindings)

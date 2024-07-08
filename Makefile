@@ -3,7 +3,7 @@ CFLAGS= -Wall -Werror
 PREFIX = /usr
 
 config.h:
-	cp config.def.h $@
+	cp includes/config.def.h $@
 	
 build: main.c config.h
 	$(CC) -O3 $(CFLAGS) -o skeybindd main.c `pkg-config --cflags --libs libevdev`

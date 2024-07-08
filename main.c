@@ -1,8 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <stdint.h>
-
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -13,10 +8,8 @@
 #include <libevdev/libevdev.h>
 #include <libevdev/libevdev-uinput.h>
 
+#include "includes/skeybindd.h"
 #include "config.h"
-
-#define VERSION "1.0"
-
 /*
 	TODO
 	- Properly handle dropping key events
@@ -132,8 +125,10 @@ int handle_event(struct input_event *ev, uint16_t *keyState)
 	case 1: // Key pressed
 		for (int i = 0; i <= KEY_BUFFER - 1; i++)
 		{
+			// Out of sync
 			if (keyState[i] == ev->code)
 			{
+				memset(keyState, 0, sizeof(uint16_t) * KEY_BUFFER);
 				return 1;
 			}
 			if (keyState[i] == 0)
@@ -155,7 +150,7 @@ int handle_event(struct input_event *ev, uint16_t *keyState)
 
 		for (int i = 0; i <= KEYBINDING_LEN; i++)
 		{
-			if (keylist == keybindings[i].binding)
+			if (keylist == keybindings[i].binding.seed)
 			{
 				program_spawn((char **)keybindings[i].command);
 				return 1;
@@ -221,11 +216,13 @@ int main(int argc, char *argv[])
 	/* Sorts keybinds in an expected format */
 	for (int i = 0; i < KEYBINDING_LEN; i++)
 	{
-		sort(keybindings[i].keycodes, KEY_BUFFER);
+		sort(keybindings[i].binding.keycodes, KEY_BUFFER);
+		uint64_t tempSeed = 0;
 		for (int j = 0; j < KEY_BUFFER; j++)
 		{
-			keybindings[i].binding = keybindings[i].binding << 16 | keybindings[i].keycodes[j];
+			tempSeed = tempSeed << 16 | keybindings[i].binding.keycodes[j];
 		}
+		keybindings[i].binding.seed = tempSeed;
 	}
 
 	// Will contain all active key events
@@ -234,8 +231,9 @@ int main(int argc, char *argv[])
 	struct input_event ev;
 
 	// For now when grabbing device it might hold first key pressed
-	libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
-	libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
+	//  This didn't work //
+	//  libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
+	//  libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
 
 	for (int i = 0; i < 1000; i++)
 	{
