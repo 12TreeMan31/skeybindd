@@ -8,6 +8,11 @@
 #include <stdint.h>
 
 #define VERSION "1.1"
+/* TODO
+    - Starting up without keeping the last regestered event
+    - Stop program from crashing when device is unplugged
+    - Getting context when a DE is started so that graphical programs can be launched
+*/
 #define KEY_BUFFER 4
 
 union bindingPair
@@ -19,7 +24,6 @@ union bindingPair
 struct keybinding
 {
     union bindingPair binding;
-    // In the future I would like add support for function callbacks
     const char **command;
 };
 

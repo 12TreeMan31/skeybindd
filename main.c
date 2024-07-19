@@ -10,12 +10,6 @@
 
 #include "includes/skeybindd.h"
 #include "config.h"
-/*
-	TODO
-	- Properly handle dropping key events
-	- Starting up without keeping the last regestered event
-	- Stop program from crashing when device is unplugged
-*/
 
 int daemonize(void)
 {
@@ -44,7 +38,7 @@ int daemonize(void)
 	return 0;
 }
 
-void program_spawn(char *command[])
+void spawn_program(char *command[])
 {
 	if (fork() == 0)
 	{
@@ -60,28 +54,20 @@ void program_spawn(char *command[])
 
 int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, int fd)
 {
-	int rc;
-
-	rc = libevdev_new_from_fd(fd, dev);
-	if (rc < 0)
+	if (libevdev_new_from_fd(fd, dev) < 0)
 	{
-		return rc;
+		return -1;
 	}
-
-	// The reason why we grab the device is so that another application doesn't also try and regester key events
-	rc = libevdev_grab(*dev, LIBEVDEV_GRAB);
-	if (rc < 0)
+	if (libevdev_grab(*dev, LIBEVDEV_GRAB) < 0)
 	{
 		libevdev_free(*dev);
-		return rc;
+		return -1;
 	}
-
-	rc = libevdev_uinput_create_from_device(*dev, LIBEVDEV_UINPUT_OPEN_MANAGED, udev);
-	if (rc < 0)
+	if (libevdev_uinput_create_from_device(*dev, LIBEVDEV_UINPUT_OPEN_MANAGED, udev) < 0)
 	{
 		libevdev_grab(*dev, LIBEVDEV_UNGRAB);
 		libevdev_free(*dev);
-		return rc;
+		return -1;
 	}
 
 	return 0;
@@ -105,8 +91,7 @@ void sort(uint16_t *arr, int n)
 	}
 }
 
-/* Looks to see if anything interesting is happening
-   Returns -1 on error, 0 if no keybinding, 1 if keybinding*/
+// Returns -1 on error, 0 if no keybinding, 1 if keybinding
 int handle_event(struct input_event *ev, uint16_t *keyState)
 {
 	uint64_t keylist = 0;
@@ -138,7 +123,7 @@ int handle_event(struct input_event *ev, uint16_t *keyState)
 			}
 		}
 
-		// Formats pressedKeys so its easier to compare
+		// Formats keyState so its easier to compare
 		sort(keyState, KEY_BUFFER);
 
 	case 2: // Key held
@@ -152,7 +137,7 @@ int handle_event(struct input_event *ev, uint16_t *keyState)
 		{
 			if (keylist == keybindings[i].binding.seed)
 			{
-				program_spawn((char **)keybindings[i].command);
+				spawn_program((char **)keybindings[i].command);
 				return 1;
 			}
 		}
@@ -169,7 +154,7 @@ static const struct option long_options[] = {
 	{"file", required_argument, NULL, 'f'},
 	{0, 0, 0, 0}};
 
-// Should return the fd of the keyboard
+// Returns the keyboards fd
 int handle_arguments(int argc, char *argv[])
 {
 	int fd;
@@ -192,7 +177,7 @@ int handle_arguments(int argc, char *argv[])
 			}
 			break;
 		case 'v':
-			printf("skeybindd " VERSION " 2024-07-08\n");
+			printf("skeybindd " VERSION "\n");
 			exit(EXIT_SUCCESS);
 			break;
 		}
@@ -202,39 +187,32 @@ int handle_arguments(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-	int fd = handle_arguments(argc, argv);
+	int keyboardfd = handle_arguments(argc, argv);
 	struct libevdev *dev = NULL;
 	struct libevdev_uinput *udev = NULL;
 
-	if (create_udevice(&dev, &udev, fd) < 0)
+	if (create_udevice(&dev, &udev, keyboardfd) < 0)
 	{
 		perror("Could not create device");
-		close(fd);
+		close(keyboardfd);
 		return -1;
 	}
 
-	/* Sorts keybinds in an expected format */
+	// Sorts keybinds in an expected format
 	for (int i = 0; i < KEYBINDING_LEN; i++)
 	{
 		sort(keybindings[i].binding.keycodes, KEY_BUFFER);
 		uint64_t tempSeed = 0;
 		for (int j = 0; j < KEY_BUFFER; j++)
 		{
+			// This is done becuase it simplifies comparisons with the active keyboard state
 			tempSeed = tempSeed << 16 | keybindings[i].binding.keycodes[j];
 		}
 		keybindings[i].binding.seed = tempSeed;
 	}
 
-	// Will contain all active key events
 	uint16_t keyState[KEY_BUFFER] = {0};
-
 	struct input_event ev;
-
-	// For now when grabbing device it might hold first key pressed
-	//  This didn't work //
-	//  libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
-	//  libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
-
 	while (libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0)
 	{
 		// Event dropped
@@ -247,7 +225,7 @@ int main(int argc, char *argv[])
 		if (handle_event(&ev, keyState) == 1)
 			continue;
 
-		// MCS_SCAN is not dropped properly
+		// MCS_SCAN is not dropped properly?
 		libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
 	}
 
