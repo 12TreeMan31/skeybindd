@@ -25,7 +25,7 @@ static struct keybinding keybindings[] = {
 	{.binding.keycodes = {KEY_VOLUMEUP}, volume_up},
 	{.binding.keycodes = {KEY_VOLUMEDOWN}, volume_down},
 	{.binding.keycodes = {KEY_MUTE}, volume_mute},
-	{.binding.keycodes = {KEY_LEFTSHIFT, MOD_KEY, KEY_F4}, mic_mute},
+	{.binding.keycodes = {MOD_KEY, KEY_F4}, mic_mute},
 
 	{.binding.keycodes = {KEY_NEXTSONG}, music_next},
 	{.binding.keycodes = {KEY_PREVIOUSSONG}, music_previous},

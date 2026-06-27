@@ -1,4 +1,4 @@
-CC=clang
+CC=gcc
 CFLAGS= -Wall -Werror
 PREFIX = /usr
 
@@ -9,7 +9,7 @@ build: main.c config.h
 	$(CC) -O3 $(CFLAGS) -o skeybindd main.c `pkg-config --cflags --libs libevdev`
 
 debug: main.c config.h
-	gcc $(CFLAGS) -o skeybindd main.c `pkg-config --cflags --libs libevdev` -g -pg -fprofile-arcs -ftest-coverage
+	gcc $(CFLAGS) -o skeybindd main.c `pkg-config --cflags --libs libevdev` -g
 
 install: build
 	mkdir -p ${DESTDIR}${PREFIX}/bin

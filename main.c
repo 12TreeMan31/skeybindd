@@ -1,42 +1,15 @@
-#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <getopt.h>
+#include <libevdev/libevdev-uinput.h>
+#include <libevdev/libevdev.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <libevdev/libevdev.h>
-#include <libevdev/libevdev-uinput.h>
+#include <unistd.h>
 
-#include "includes/skeybindd.h"
 #include "config.h"
-
-int daemonize(void)
-{
-	if (fork() != 0)
-		exit(EXIT_SUCCESS);
-
-	if (setsid() == -1)
-		return -1;
-
-	if (fork() != 0)
-		exit(EXIT_SUCCESS);
-
-	int maxfd, fd;
-	maxfd = sysconf(_SC_OPEN_MAX);
-	for (fd = 0; fd < maxfd; fd++)
-		close(fd);
-
-	close(STDIN_FILENO);
-	fd = open("/dev/null", O_RDWR);
-	if (fd != STDIN_FILENO)
-		return -1;
-	if (dup2(STDIN_FILENO, STDOUT_FILENO) != STDOUT_FILENO)
-		return -1;
-	if (dup2(STDIN_FILENO, STDERR_FILENO) != STDERR_FILENO)
-		return -1;
-	return 0;
-}
+#include "includes/skeybindd.h"
 
 void spawn_program(char *command[])
 {
@@ -150,29 +123,23 @@ int handle_event(struct input_event *ev, uint16_t *keyState)
 
 static const struct option long_options[] = {
 	{"version", no_argument, NULL, 'v'},
-	{"daemon", no_argument, NULL, 'd'},
 	{"file", required_argument, NULL, 'f'},
 	{0, 0, 0, 0}};
 
 // Returns the keyboards fd
 int handle_arguments(int argc, char *argv[])
 {
-	int fd;
-	int opt = 0, optIndex = 0;
+	int fd = -1, opt = 0, optIndex = 0;
 	while (opt != -1)
 	{
-		opt = getopt_long(argc, argv, "vdf:", long_options, &optIndex);
+		opt = getopt_long(argc, argv, "vf:", long_options, &optIndex);
 		switch (opt)
 		{
-		case 'd':
-			if (daemonize() == -1)
-				exit(EXIT_FAILURE);
-			break;
 		case 'f':
 			fd = open(optarg, O_RDONLY | O_NOCTTY);
 			if (fd == -1)
 			{
-				perror("Could not open device");
+				ERR_LOG("Could not open device");
 				exit(EXIT_FAILURE);
 			}
 			break;
@@ -193,7 +160,7 @@ int main(int argc, char *argv[])
 
 	if (create_udevice(&dev, &udev, keyboardfd) < 0)
 	{
-		perror("Could not create device");
+		ERR_LOG("Could not create device");
 		close(keyboardfd);
 		return -1;
 	}
@@ -219,7 +186,7 @@ int main(int argc, char *argv[])
 		if (ev.code == EV_SYN && ev.type == SYN_DROPPED)
 		{
 			libevdev_next_event(dev, LIBEVDEV_READ_FLAG_SYNC, &ev);
-			fprintf(stderr, "SYN_DROPPED\n");
+			ERR_LOG("SYN_DROPPED\n");
 		}
 
 		if (handle_event(&ev, keyState) == 1)
@@ -229,5 +196,6 @@ int main(int argc, char *argv[])
 		libevdev_uinput_write_event(udev, ev.type, ev.code, ev.value);
 	}
 
-	return 0;
+	ERR_LOG("%i: %s\n", errno, strerror(errno));
+	return 1;
 }
