@@ -2,10 +2,11 @@
 #define CONFIG_H
 
 /* See for more info on possible keys or use a program like evtest */
-#include <linux/input-event-codes.h>
 #include "includes/skeybindd.h"
+#include <linux/input-event-codes.h>
 
 #define MOD_KEY KEY_LEFTMETA
+#define TRIGGER(x) {"sh", "$XDG_CONFIG_HOME/skeybindd/" + x, NULL}
 
 /* put commands here */
 /* pulseaudio */
