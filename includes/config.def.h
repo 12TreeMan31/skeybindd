@@ -23,15 +23,11 @@ static const char *music_previous[] = {"mpc", "prev", NULL};
 
 /* put keybindings here */
 static struct keybinding keybindings[] = {
-	{.binding.keycodes = {KEY_VOLUMEUP}, volume_up},
-	{.binding.keycodes = {KEY_VOLUMEDOWN}, volume_down},
-	{.binding.keycodes = {KEY_MUTE}, volume_mute},
-	{.binding.keycodes = {MOD_KEY, KEY_F4}, mic_mute},
+    {.keycodes = {KEY_VOLUMEUP}, volume_up},     {.keycodes = {KEY_VOLUMEDOWN}, volume_down},
+    {.keycodes = {KEY_MUTE}, volume_mute},       {.keycodes = {MOD_KEY, KEY_F4}, mic_mute},
 
-	{.binding.keycodes = {KEY_NEXTSONG}, music_next},
-	{.binding.keycodes = {KEY_PREVIOUSSONG}, music_previous},
-	{.binding.keycodes = {KEY_PLAYPAUSE}, music_toggle},
-	{.binding.keycodes = {KEY_STOPCD}, music_stop},
+    {.keycodes = {KEY_NEXTSONG}, music_next},    {.keycodes = {KEY_PREVIOUSSONG}, music_previous},
+    {.keycodes = {KEY_PLAYPAUSE}, music_toggle}, {.keycodes = {KEY_STOPCD}, music_stop},
 
 };
 
