@@ -3,6 +3,7 @@
 #include <getopt.h>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
+#include <signal.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -10,6 +11,24 @@
 
 #include "config.h"
 #include "includes/skeybindd.h"
+
+static volatile sig_atomic_t keep_running = 1;
+
+static void handle_shutdown(int sig) {
+    (void)sig;
+    keep_running = 0;
+}
+
+static int setup_signals() {
+    struct sigaction sa;
+    sa.sa_handler = handle_shutdown;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    if (sigaction(SIGINT, &sa, NULL) == -1) { return -1; }
+    if (sigaction(SIGTERM, &sa, NULL) == -1) { return -1; }
+    return 0;
+}
 
 void sort(uint16_t *restrict arr, int n) {
     uint16_t key;
@@ -26,22 +45,34 @@ void sort(uint16_t *restrict arr, int n) {
     }
 }
 
-void spawn_program(char *command[]) {
-    /*pid_t fork_pid = fork();
-    if (fork_pid == 0)
-    {
-        setsid();
+int spawn_program(char *const command[]) {
+    pid_t pid = fork();
+    if (pid < 0) { return -1; }
+
+    if (pid == 0) {
+        // intermediate child
+        if (setsid() == -1) { _exit(EXIT_FAILURE); }
+
+        pid = fork();
+        if (pid < 0) { _exit(EXIT_FAILURE); }
+
+        if (pid > 0)
+            /* Intermediate child exits immediately; grandchild is
+             * reparented to init and is no longer a session leader. */
+            _exit(EXIT_SUCCESS);
+
+        // grandchild
         execvp(command[0], command);
+
+        _exit(127);
     }
-    wait(NULL);*/
-    if (fork() == 0) {
-        if (fork() == 0) {
-            setsid();
-            execvp(command[0], command);
-        }
-        exit(EXIT_SUCCESS);
+
+    // original
+    int status;
+    while (waitpid(pid, &status, 0) == -1) {
+        if (errno != EINTR) { return -1; }
     }
-    wait(NULL);
+    return 0;
 }
 
 int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, int fd) {
@@ -55,7 +86,6 @@ int create_udevice(struct libevdev **dev, struct libevdev_uinput **udev, int fd)
         libevdev_free(*dev);
         return -1;
     }
-
     return 0;
 }
 
@@ -85,7 +115,7 @@ int handle_event(struct input_event *ev, uint16_t *keyState) {
         // Fall through
     case 2: // Key held
         for (int i = 0; i < KEYBINDING_LEN; i++) {
-            int n = memcmp(keyState, keybindings[i].keycodes, KEY_BUFFER);
+            int n = memcmp(keyState, keybindings[i].keycodes, KEY_BUFFER * sizeof(uint16_t));
             if (n == 0) {
                 spawn_program((char **)keybindings[i].command);
                 return 1;
@@ -146,6 +176,11 @@ void waitReleaseAll(int fd) {
 }
 
 int main(int argc, char *argv[]) {
+    if (setup_signals() == -1) {
+        perror("sigaction");
+        return 1;
+    }
+
     int keyboardfd = handle_arguments(argc, argv);
     struct libevdev *dev = NULL;
     struct libevdev_uinput *udev = NULL;
@@ -166,7 +201,7 @@ int main(int argc, char *argv[]) {
     struct input_event ev = {0};
     uint16_t keyState[KEY_BUFFER] = {0};
     int read_flag = LIBEVDEV_READ_FLAG_NORMAL;
-    while (true) {
+    while (keep_running) {
         int rc = libevdev_next_event(dev, read_flag, &ev);
 
         if (rc == LIBEVDEV_READ_STATUS_SYNC && read_flag == LIBEVDEV_READ_FLAG_NORMAL) {
@@ -182,7 +217,8 @@ int main(int argc, char *argv[]) {
         if (rc == -EBADF) {
             // FD was closed
         } else if (rc < 0) {
-            perror("Error: ");
+            perror("Error");
+            break;
         }
 
         // We do not want other events leaking since we dont handle them (ex EV_SYN)
@@ -194,6 +230,10 @@ int main(int argc, char *argv[]) {
         libevdev_uinput_write_event(udev, EV_SYN, SYN_REPORT, 0);
     }
 
-    ERR_LOG("%i: %s\n", errno, strerror(errno));
+    libevdev_grab(dev, LIBEVDEV_UNGRAB);
+    libevdev_uinput_destroy(udev);
+    libevdev_free(dev);
+    close(keyboardfd);
+
     return 1;
 }

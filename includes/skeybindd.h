@@ -7,13 +7,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define VERSION "1.2"
+#define VERSION "1.3"
 
 #define ERR_LOG(...) fprintf(stderr, __VA_ARGS__)
 
 /* TODO
     - Stop program from crashing when device is unplugged
-    - Getting context when a DE is started so that graphical programs can be launched
 */
 #define KEY_BUFFER 4
 

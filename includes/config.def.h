@@ -6,14 +6,18 @@
 #include <linux/input-event-codes.h>
 
 #define MOD_KEY KEY_LEFTMETA
-#define TRIGGER(x) {"sh", "$XDG_CONFIG_HOME/skeybindd/" + x, NULL}
 
-/* put commands here */
+/* Macos for using the shell */
+#define SH(x) {"sh", "-c", x, NULL}
+#define BASH(x) {"bash", "-c", x, NULL}
+#define ZSH(x) {"zsh", "-c", x, NULL}
+
+/* Put commands here */
 /* pulseaudio */
-static const char *volume_up[] = {"pactl", "set-sink-volume", "@DEFAULT_SINK@", "+5%", NULL};
-static const char *volume_down[] = {"pactl", "set-sink-volume", "@DEFAULT_SINK@", "-5%", NULL};
-static const char *volume_mute[] = {"pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle", NULL};
-static const char *mic_mute[] = {"pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle", NULL};
+static const char *volume_up[] = SH("pactl set-sink-volume @DEFAULT_SINK@ +5%");
+static const char *volume_down[] = SH("pactl set-sink-volume @DEFAULT_SINK@ -5%");
+static const char *volume_mute[] = SH("pactl set-sink-mute @DEFAULT_SINK@ toggle");
+static const char *mic_mute[] = SH("pactl set-source-mute @DEFAULT_SOURCE@ toggle");
 
 /* mpc */
 static const char *music_toggle[] = {"mpc", "toggle", NULL};
@@ -21,7 +25,7 @@ static const char *music_stop[] = {"mpc", "stop", NULL};
 static const char *music_next[] = {"mpc", "next", NULL};
 static const char *music_previous[] = {"mpc", "prev", NULL};
 
-/* put keybindings here */
+/* Put keybindings here */
 static struct keybinding keybindings[] = {
     {.keycodes = {KEY_VOLUMEUP}, volume_up},     {.keycodes = {KEY_VOLUMEDOWN}, volume_down},
     {.keycodes = {KEY_MUTE}, volume_mute},       {.keycodes = {MOD_KEY, KEY_F4}, mic_mute},
@@ -31,6 +35,7 @@ static struct keybinding keybindings[] = {
 
 };
 
+/* Don't touch this */
 #define KEYBINDING_LEN sizeof(keybindings) / sizeof(*keybindings)
 
 #endif
