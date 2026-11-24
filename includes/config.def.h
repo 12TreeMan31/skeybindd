@@ -6,14 +6,18 @@
 #include <linux/input-event-codes.h>
 
 #define MOD_KEY KEY_LEFTMETA
-#define TRIGGER(x) {"sh", "$XDG_CONFIG_HOME/skeybindd/" + x, NULL}
 
-/* put commands here */
+/* Macos for using the shell */
+#define SH(x) {"sh", "-c", x, NULL}
+#define BASH(x) {"bash", "-c", x, NULL}
+#define ZSH(x) {"zsh", "-c", x, NULL}
+
+/* Put commands here */
 /* pulseaudio */
-static const char *volume_up[] = {"pactl", "set-sink-volume", "@DEFAULT_SINK@", "+5%", NULL};
-static const char *volume_down[] = {"pactl", "set-sink-volume", "@DEFAULT_SINK@", "-5%", NULL};
-static const char *volume_mute[] = {"pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle", NULL};
-static const char *mic_mute[] = {"pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle", NULL};
+static const char *volume_up[] = SH("pactl set-sink-volume @DEFAULT_SINK@ +5%");
+static const char *volume_down[] = SH("pactl set-sink-volume @DEFAULT_SINK@ -5%");
+static const char *volume_mute[] = SH("pactl set-sink-mute @DEFAULT_SINK@ toggle");
+static const char *mic_mute[] = SH("pactl set-source-mute @DEFAULT_SOURCE@ toggle");
 
 /* mpc */
 static const char *music_toggle[] = {"mpc", "toggle", NULL};
@@ -21,20 +25,17 @@ static const char *music_stop[] = {"mpc", "stop", NULL};
 static const char *music_next[] = {"mpc", "next", NULL};
 static const char *music_previous[] = {"mpc", "prev", NULL};
 
-/* put keybindings here */
+/* Put keybindings here */
 static struct keybinding keybindings[] = {
-	{.binding.keycodes = {KEY_VOLUMEUP}, volume_up},
-	{.binding.keycodes = {KEY_VOLUMEDOWN}, volume_down},
-	{.binding.keycodes = {KEY_MUTE}, volume_mute},
-	{.binding.keycodes = {MOD_KEY, KEY_F4}, mic_mute},
+    {.keycodes = {KEY_VOLUMEUP}, volume_up},     {.keycodes = {KEY_VOLUMEDOWN}, volume_down},
+    {.keycodes = {KEY_MUTE}, volume_mute},       {.keycodes = {MOD_KEY, KEY_F4}, mic_mute},
 
-	{.binding.keycodes = {KEY_NEXTSONG}, music_next},
-	{.binding.keycodes = {KEY_PREVIOUSSONG}, music_previous},
-	{.binding.keycodes = {KEY_PLAYPAUSE}, music_toggle},
-	{.binding.keycodes = {KEY_STOPCD}, music_stop},
+    {.keycodes = {KEY_NEXTSONG}, music_next},    {.keycodes = {KEY_PREVIOUSSONG}, music_previous},
+    {.keycodes = {KEY_PLAYPAUSE}, music_toggle}, {.keycodes = {KEY_STOPCD}, music_stop},
 
 };
 
+/* Don't touch this */
 #define KEYBINDING_LEN sizeof(keybindings) / sizeof(*keybindings)
 
 #endif

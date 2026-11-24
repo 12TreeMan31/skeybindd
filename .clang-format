@@ -1,0 +1,21 @@
+BasedOnStyle: LLVM
+UseTab: Never
+IndentWidth: 4
+TabWidth: 4
+AllowShortIfStatementsOnASingleLine: true
+IndentCaseLabels: false
+AccessModifierOffset: -4
+NamespaceIndentation: All
+FixNamespaceComments: false
+
+# --- Key additions for Rust mimicry ---
+ColumnLimit: 100  # Match rustfmt's default max_width
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: false   # Keep brace on same line for functions
+  AfterControlStatement: false # Keep brace on same line for if/for/while
+  AfterClass: false
+  AfterStruct: false
+  AfterEnum: false
+AllowShortFunctionsOnASingleLine: true
+AllowShortBlocksOnASingleLine: true

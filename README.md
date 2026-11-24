@@ -36,5 +36,5 @@ Then run:
 
 ```
 make systemd
-systemctl --user enable skeybindd.serivce
+systemctl --user enable skeybindd.service
 ```

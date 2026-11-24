@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -Wall -Werror
+CFLAGS= -Wall
 PREFIX = /usr
 
 config.h:
